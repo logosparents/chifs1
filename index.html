@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小一中文試卷智能生成器</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for professional Chinese typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght=300;400;500;700;900&family=Noto+Serif+TC:wght=400;600;900&display=swap" rel="stylesheet">
+    <!-- React and Babel CDN for single-file interactive app -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Tailwind Custom Config -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Noto Sans TC', 'sans-serif'],
+                        serif: ['Noto Serif TC', 'serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            200: '#bbf7d0',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Print Styles */
+        @media print {
+            body {
+                background-color: white !important;
+                color: black !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-area {
+                width: 100% !important;
+                max-width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                box-shadow: none !important;
+            }
+            .page-break {
+                page-break-before: always;
+                break-before: page;
+            }
+            .exam-page {
+                border: none !important;
+                margin-bottom: 0 !important;
+                padding: 1.5cm !important;
+                min-height: 29.7cm;
+                height: auto;
+            }
+        }
+        
+        /* Custom P1 styling */
+        .p1-pinyin {
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
+        .chinese-char {
+            font-family: 'Noto Serif TC', serif;
+        }
+        .write-box {
+            border: 1px dashed #9ca3af;
+            display: inline-block;
+            width: 2.2rem;
+            height: 2.2rem;
+            text-align: center;
+            line-height: 2.1rem;
+            vertical-align: middle;
+            border-radius: 4px;
+        }
+        .tian-zi-ge {
+            position: relative;
+            width: 3rem;
+            height: 3rem;
+            border: 2px solid #22c55e;
+            display: inline-block;
+        }
+        .tian-zi-ge::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            border-top: 1px dashed #86efac;
+        }
+        .tian-zi-ge::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 0;
+            height: 100%;
+            border-left: 1px dashed #86efac;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen">
+
+    <div id="root"></div>
+
+    <!-- React Application Logic -->
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Data Pools for Randomization
+        const punctuationPool = [
+            {
+                id: 1,
+                sentences: [
+                    { text: "新年時", spaceBefore: false, answer: "，", showAnswer: "，" },
+                    { text: "大家都喜歡穿着黃色", spaceBefore: false, answer: "、", showAnswer: "、" },
+                    { text: "紅色", spaceBefore: false, answer: "、", showAnswer: "、" },
+                    { text: "粉紅色和紫色的衣服", spaceBefore: false, answer: "。", showAnswer: "。" },
+                    { text: "\n家明問我", spaceBefore: false, answer: "：", showAnswer: "：" },
+                    { text: "", spaceBefore: true, answer: "「", showAnswer: "「" },
+                    { text: "請問這輛巴士是往哪裏去的", spaceBefore: false, answer: "？", showAnswer: "？" },
+                    { text: "", spaceBefore: true, answer: "」", showAnswer: "」" },
+                    { text: "\n這次比賽很好玩", spaceBefore: false, answer: "，", showAnswer: "，" },
+                    { text: "我們還得到比賽冠軍啊", spaceBefore: false, answer: "！", showAnswer: "！" }
+                ]
+            },
+            {
+                id: 2,
+                sentences: [
+                    { text: "星期天", spaceBefore: false, answer: "，", showAnswer: "，" },
+                    { text: "爸爸帶我到郊外放風箏", spaceBefore: false, answer: "。" },
+                    { text: "\n妹妹高興地喊道", spaceBefore: false, answer: "：", showAnswer: "：" },
+                    { text: "", spaceBefore: true, answer: "「", showAnswer: "「" },
+                    { text: "這裏的花兒真美麗啊", spaceBefore: false, answer: "！", showAnswer: "！" },
+                    { text: "", spaceBefore: true, answer: "」", showAnswer: "」" },
+                    { text: "\n花園裏開滿了黃色", spaceBefore: false, answer: "、", showAnswer: "、" },
+                    { text: "粉紅色", spaceBefore: false, answer: "、", showAnswer: "、" },
+                    { text: "大紅色和紫色的鬱金香", spaceBefore: false, answer: "。", showAnswer: "。" },
+                    { text: "\n你看見那隻漂亮的蝴蝶了嗎", spaceBefore: false, answer: "？", showAnswer: "？" }
+                ]
+            }
+        ];
+
+        const wordFillPool = [
+            { word: "窗戶", sentence: "老師打開（窗戶），保持室內空氣流通。", lesson: "第17課" },
+            { word: "桌子", sentence: "小明把課本和筆盒整齊地放在（桌子）上。", lesson: "第18課" },
+            { word: "乾淨", sentence: "我們要把雙手洗得（乾淨），才去吃晚飯。", lesson: "第12課" },
+            { word: "膽小", sentence: "妹妹十分（膽小），一聽到雷聲就嚇得哭起來。", lesson: "第14課" },
+            { word: "緊緊", sentence: "媽媽（緊緊）地牽着我的手，帶我過馬路。", lesson: "第22課" },
+            { word: "為甚麼", sentence: "你（為甚麼）今天上學遲到了呢？", lesson: "第20課" },
+            { word: "收拾", sentence: "放學前，同學們都主動（收拾）好自己的書包。", lesson: "第17課" },
+            { word: "決定", sentence: "經過全班同學投票，我們（決定）去西貢郊遊。", lesson: "第29課" },
+            { word: "美麗", sentence: "展覽館掛滿了（美麗）的油畫，吸引很多遊人觀賞。", lesson: "第25課" },
+            { word: "幸福", sentence: "穿上媽媽親手編織的毛衣，我感到自己是全世界最（幸福）的人。", lesson: "第29課" },
+            { word: "喜歡", sentence: "放學後，我最（喜歡）和弟弟一起打乒乓球。", lesson: "第25課" }
+        ];
+
+        const freeFillPool = [
+            { word: "圖畫", sentence: "美術課上，我們用彩色的蠟筆畫了一幅美麗的（圖畫）。", lesson: "第25課" },
+            { word: "漂亮", sentence: "姐姐今天穿了一條十分（漂亮）的新裙子。", lesson: "第23課" },
+            { word: "感謝", sentence: "我買了一份禮物送給家傭姐姐，（感謝）她對我的悉心照顧。", lesson: "第29課" },
+            { word: "知道", sentence: "爸爸（知道）弟弟最喜歡砌模型，所以買了模型飛機作為他的生日禮物。", lesson: "第29課" },
+            { word: "要求", sentence: "老師（要求）我們上課時要專心聽講，不可喧嘩。", lesson: "第15課" },
+            { word: "馬路", sentence: "過（馬路）時，我們必須看清紅綠燈，注意安全。", lesson: "第19課" },
+            { word: "放開", sentence: "小明不小心（放開）了拿着氫氣球的手，氣球便飛上天空去了。", lesson: "第22課" },
+            { word: "整潔", sentence: "每天放學後，校工都會打掃課室，保持環境（整潔）。", lesson: "第17課" }
+        ];
+
+        const classifierPool = [
+            {
+                q: "我把一（　　）小樹苗種在泥土裏。",
+                options: ["A. 顆", "B. 棵", "C. 個"],
+                ans: "B"
+            },
+            {
+                q: "可愛的小兔子有一（　　）長長的耳朵。",
+                options: ["A. 隻", "B. 條", "C. 對"],
+                ans: "C"
+            },
+            {
+                q: "魚缸裏游着一（　　）魚兒，它的顏色很鮮豔。",
+                options: ["A. 尾", "B. 朵", "C. 本"],
+                ans: "A"
+            },
+            {
+                q: "叔叔的手腕上戴着一（　　）精美的手錶。",
+                options: ["A. 隻", "B. 塊", "C. 個"],
+                ans: "A"
+            },
+            {
+                q: "草地上開滿了一（　　）朵美麗的小紅花。",
+                options: ["A. 朵", "B. 棵", "C. 條"],
+                ans: "A"
+            }
+        ];
+
+        const personificationPool = [
+            { s: "星星眨着眼睛，靜靜地守護着月亮姐姐。", isP: true },
+            { s: "清澈的湖水倒映藍天，翠綠的小草佈滿岸邊。", isP: false },
+            { s: "可愛的小鳥停在粗壯的樹枝上梳理羽毛。", isP: false },
+            { s: "月亮姐姐躲在雲兒後面，探頭偷看人們。", isP: true },
+            { s: "花兒在風中跳起優美的舞蹈，迎接春天的到來。", isP: true },
+            { s: "小溪一路唱着歡快的歌兒流向大海。", isP: true },
+            { s: "高大的樟樹像一排排士兵守衛在校門兩側。", isP: false } // 比喻，非擬人
+        ];
+
+        const onomatopoeiaPool = [
+            { word: "汪汪", sentence: "小狗不停地（汪汪）叫，搖着尾巴向我跑過來。" },
+            { word: "叮噹", sentence: "預備上課的鈴聲（叮噹）響起，我們立刻走回課室。" },
+            { word: "吱吱", sentence: "天剛亮，小鳥就在籠子裏（吱吱）亂叫。" },
+            { word: "呱呱", sentence: "池塘裏的小青蛙（呱呱）地叫個不停。" },
+            { word: "嘩啦", sentence: "我站在河邊，聽着（嘩啦）的流水聲，感到身心舒暢。" },
+            { word: "沙沙", sentence: "秋風吹過森林，樹葉發出（沙沙）的聲響。" }
+        ];
+
+        const reorderSentencePool = [
+            {
+                id: 1,
+                parts: ["尖尖的", "哥哥", "放進", "筆盒裏", "把", "鉛筆", "小心地", "。"],
+                ans: "哥哥把尖尖的鉛筆小心地放進筆盒裏。"
+            },
+            {
+                id: 2,
+                parts: ["公園", "單車", "媽媽", "星期六", "帶我", "踏", "去", "。", "，"],
+                ans: "星期六，媽媽帶我去公園踏單車。"
+            },
+            {
+                id: 3,
+                parts: ["妹妹", "美麗的", "洋娃娃", "在床上", "抱着", "睡覺", "甜甜地", "。"],
+                ans: "妹妹在床上抱着美麗的洋娃娃甜甜地睡覺。"
+            }
+        ];
+
+        const rewriteSentencePool = [
+            {
+                orig: "樹葉會在秋天落下來。",
+                key: "為甚麼",
+                ans: "為甚麼樹葉會在秋天落下來？ / 樹葉為甚麼會在秋天落下來？"
+            },
+            {
+                orig: "爸爸去便利店買冰淇淋。",
+                key: "為甚麼",
+                ans: "為甚麼爸爸去便利店買冰淇淋？ / 爸爸為甚麼去便利店買冰淇淋？"
+            },
+            {
+                orig: "貓咪喜歡在白天睡覺。",
+                key: "為甚麼",
+                ans: "為甚麼貓咪喜歡在白天睡覺？"
+            }
+        ];
+
+        function App() {
+            // Document State
+            const [schoolName, setSchoolName] = useState("太陽島小學");
+            const [examTitle, setExamTitle] = useState("第二次總結性評估前練習");
+            const [fontSize, setFontSize] = useState("text-xl"); // text-lg, text-xl, text-2xl
+            const [showAnswers, setShowAnswers] = useState(false);
+            const [themeColor, setThemeColor] = useState("emerald"); // emerald, blue, indigo
+
+            // Randomized Content State
+            const [puncEx, setPuncEx] = useState(punctuationPool[0]);
+            const [wordFillEx, setWordFillEx] = useState([]);
+            const [wordFillBank, setWordFillBank] = useState([]);
+            const [freeFillEx, setFreeFillEx] = useState([]);
+            const [classifierEx, setClassifierEx] = useState([]);
+            const [personificationEx, setPersonificationEx] = useState([]);
+            const [onomatopoeiaEx, setOnomatopoeiaEx] = useState([]);
+            const [onomatopoeiaBank, setOnomatopoeiaBank] = useState([]);
+            const [reorderEx, setReorderEx] = useState([]);
+            const [rewriteEx, setRewriteEx] = useState([]);
+
+            // Helper to shuffle arrays
+            const shuffleArray = (array) => {
+                const arr = [...array];
+                for (let i = arr.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [arr[i], arr[j]] = [arr[j], arr[i]];
+                }
+                return arr;
+            };
+
+            // Main function to generate dynamic paper
+            const generateNewPaper = () => {
+                // 1. Punctuation
+                const randomPunc = punctuationPool[Math.floor(Math.random() * punctuationPool.length)];
+                setPuncEx(randomPunc);
+
+                // 2. Word Fill-in (Choose 5 words randomly)
+                const shuffledWordPool = shuffleArray(wordFillPool);
+                const chosenWordFill = shuffledWordPool.slice(0, 5);
+                setWordFillEx(chosenWordFill);
+                setWordFillBank(shuffleArray(chosenWordFill.map(item => item.word)));
+
+                // 3. Free Fill-in (Choose 5 words randomly)
+                const shuffledFreePool = shuffleArray(freeFillPool);
+                setFreeFillEx(shuffledFreePool.slice(0, 5));
+
+                // 5. Classifiers (Choose 3)
+                const shuffledClass = shuffleArray(classifierPool);
+                setClassifierEx(shuffledClass.slice(0, 3));
+
+                // 6. Personification (Choose 4)
+                const shuffledPers = shuffleArray(personificationPool);
+                setPersonificationEx(shuffledPers.slice(0, 4));
+
+                // 7. Onomatopoeia (Choose 5)
+                const shuffledOno = shuffleArray(onomatopoeiaPool);
+                const chosenOno = shuffledOno.slice(0, 5);
+                setOnomatopoeiaEx(chosenOno);
+                setOnomatopoeiaBank(shuffleArray(chosenOno.map(item => item.word)));
+
+                // 8. Reorder Sentences (Choose 2)
+                const shuffledReorder = shuffleArray(reorderSentencePool);
+                setReorderEx(shuffledReorder.slice(0, 2));
+
+                // 9. Rewrite Sentences (Choose 2)
+                const shuffledRewrite = shuffleArray(rewriteSentencePool);
+                setRewriteEx(shuffledRewrite.slice(0, 2));
+            };
+
+            // Initialize on mount
+            useEffect(() => {
+                generateNewPaper();
+            }, []);
+
+            // Theme CSS helper
+            const getThemeClasses = () => {
+                const base = {
+                    emerald: {
+                        primary: "bg-emerald-600 hover:bg-emerald-700 text-white",
+                        border: "border-emerald-600",
+                        text: "text-emerald-700",
+                        lightBg: "bg-emerald-50",
+                        accentBorder: "border-emerald-200",
+                    },
+                    blue: {
+                        primary: "bg-blue-600 hover:bg-blue-700 text-white",
+                        border: "border-blue-600",
+                        text: "text-blue-700",
+                        lightBg: "bg-blue-50",
+                        accentBorder: "border-blue-200",
+                    },
+                    indigo: {
+                        primary: "bg-indigo-600 hover:bg-indigo-700 text-white",
+                        border: "border-indigo-600",
+                        text: "text-indigo-700",
+                        lightBg: "bg-indigo-50",
+                        accentBorder: "border-indigo-200",
+                    },
+                };
+                return base[themeColor] || base.emerald;
+            };
+
+            const t = getThemeClasses();
+
+            return (
+                <div className="flex flex-col lg:flex-row min-h-screen">
+                    
+                    {/* 🔧 Control Panel - Hidden during Printing */}
+                    <div className="w-full lg:w-[380px] bg-white p-6 border-b lg:border-r border-slate-200 shadow-sm no-print flex flex-col justify-between sticky top-0 z-30 lg:h-screen lg:overflow-y-auto">
+                        <div>
+                            <div className="flex items-center gap-3 mb-6">
+                                <span className="text-3xl">📄</span>
+                                <div>
+                                    <h1 className="font-black text-lg text-slate-800 tracking-tight">小一中文試卷生成器</h1>
+                                    <p className="text-xs text-slate-500 font-medium">系統工程師專用後台 v1.2</p>
+                                </div>
+                            </div>
+
+                            <hr className="mb-6 border-slate-100" />
+
+                            {/* Settings Sections */}
+                            <div className="space-y-5">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">學校名稱</label>
+                                    <input 
+                                        type="text" 
+                                        value={schoolName} 
+                                        onChange={(e) => setSchoolName(e.target.value)}
+                                        className="w-full p-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">評估名稱</label>
+                                    <input 
+                                        type="text" 
+                                        value={examTitle} 
+                                        onChange={(e) => setExamTitle(e.target.value)}
+                                        className="w-full p-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">風格色調</label>
+                                    <div className="flex gap-2">
+                                        {['emerald', 'blue', 'indigo'].map((color) => (
+                                            <button
+                                                key={color}
+                                                onClick={() => setThemeColor(color)}
+                                                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold capitalize border ${themeColor === color ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+                                            >
+                                                {color === 'emerald' ? '清新綠' : color === 'blue' ? '天空藍' : '優雅靛'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">字體大小限制 (小一標準)</label>
+                                    <div className="flex gap-2">
+                                        {[
+                                            { label: '標準 (16px)', val: 'text-lg' },
+                                            { label: '大字 (20px)', val: 'text-xl' },
+                                            { label: '特大 (24px)', val: 'text-2xl' }
+                                        ].map((sz) => (
+                                            <button
+                                                key={sz.val}
+                                                onClick={() => setFontSize(sz.val)}
+                                                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border ${fontSize === sz.val ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+                                            >
+                                                {sz.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="pt-2">
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={showAnswers} 
+                                            onChange={(e) => setShowAnswers(e.target.checked)} 
+                                            className="sr-only peer"
+                                        />
+                                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                                        <span className="ml-3 text-sm font-bold text-slate-700">顯示參考答案</span>
+                                    </label>
+                                    <p className="text-[11px] text-slate-400 mt-1">開啟後，學生寫作處會以紅字即時顯示參考正確答案。</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-8 space-y-3">
+                            <button 
+                                onClick={generateNewPaper}
+                                className="w-full py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-sm transition-all flex items-center justify-center gap-2 border border-slate-300 shadow-sm"
+                            >
+                                <span>🎲</span> 一鍵隨機變換題目
+                            </button>
+
+                            <button 
+                                onClick={() => window.print()}
+                                className={`w-full py-3 px-4 ${t.primary} font-bold rounded-xl text-sm transition-all shadow-md flex items-center justify-center gap-2`}
+                            >
+                                <span>🖨️</span> 列印正式試卷 (A4)
+                            </button>
+                            <p className="text-[10px] text-slate-400 text-center leading-relaxed">提示：列印時請在「更多設定」中勾選「背景圖形」，並將邊界設為「無」或「預設」，以獲得最佳排版效果。</p>
+                        </div>
+                    </div>
+
+                    {/* 📄 Paper View Area */}
+                    <div className="flex-1 p-4 md:p-12 overflow-y-auto print:p-0 flex justify-center bg-slate-100 print:bg-white">
+                        <div className={`print-area w-full max-w-[21cm] bg-white shadow-xl rounded-2xl print:shadow-none print:rounded-none overflow-hidden ${fontSize} leading-loose font-serif`}>
+                            
+                            {/* COVER PAGE (Page 1) */}
+                            <div className="exam-page p-12 md:p-16 flex flex-col justify-between border-b border-slate-200 min-h-[29.7cm] relative">
+                                <div className="text-center mt-6">
+                                    <h2 className="text-3xl font-bold tracking-widest text-slate-800 mb-2">{schoolName}</h2>
+                                    <div className="h-1 w-24 mx-auto my-4 bg-emerald-500 rounded"></div>
+                                    <h3 className="text-4xl font-black text-slate-900 tracking-wide leading-snug">{examTitle}</h3>
+                                    <p className="text-2xl font-bold text-slate-500 mt-4">中國語文科</p>
+                                </div>
+
+                                {/* Nice SVG Illustration on Cover */}
+                                <div className="my-8 flex justify-center">
+                                    <svg className="w-72 h-72" viewBox="0 0 500 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <rect width="500" height="400" rx="20" fill="#f0fdf4"/>
+                                        <circle cx="150" cy="200" r="100" fill="#bbf7d0" opacity="0.6"/>
+                                        <circle cx="350" cy="220" r="90" fill="#86efac" opacity="0.4"/>
+                                        {/* Stylized boy and girl */}
+                                        <g transform="translate(100, 120)">
+                                            {/* Boy */}
+                                            <circle cx="60" cy="60" r="40" fill="#fbcfe8"/>
+                                            <path d="M60,20 C40,20 30,35 30,50 C30,52 60,30 90,50 C90,35 80,20 60,20 Z" fill="#1e293b"/>
+                                            <rect x="45" y="100" width="30" height="60" rx="10" fill="#22c55e" />
+                                            {/* Pencil */}
+                                            <rect x="80" y="80" width="8" height="35" rx="2" fill="#eab308" transform="rotate(15)"/>
+                                        </g>
+                                        <g transform="translate(250, 130)">
+                                            {/* Girl */}
+                                            <circle cx="60" cy="60" r="40" fill="#fbcfe8"/>
+                                            <path d="M60,18 C30,18 20,40 20,70 C40,65 50,55 60,55 C70,55 80,65 100,70 C100,40 90,18 60,18 Z" fill="#475569"/>
+                                            <rect x="45" y="100" width="30" height="60" rx="10" fill="#ec4899" />
+                                            {/* Book */}
+                                            <rect x="15" y="110" width="40" height="30" rx="4" fill="#3b82f6" transform="rotate(-10)"/>
+                                        </g>
+                                    </svg>
+                                </div>
+
+                                <div className="max-w-md mx-auto w-full bg-slate-50 print:bg-slate-50/50 p-8 rounded-2xl border border-slate-100 space-y-6">
+                                    <div className="flex items-center justify-between border-b border-slate-300 pb-3">
+                                        <span className="font-bold text-slate-600">姓名：</span>
+                                        <div className="flex-1 ml-4 border-b border-dashed border-slate-400 h-8"></div>
+                                    </div>
+                                    <div className="flex items-center justify-between border-b border-slate-300 pb-3">
+                                        <span className="font-bold text-slate-600">班別：</span>
+                                        <span className="font-bold">FS1 (　　)</span>
+                                        <div className="flex-1 ml-4 border-b border-dashed border-slate-400 h-8"></div>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-bold text-slate-600">分數：</span>
+                                        <div className="w-24 h-16 border-2 border-rose-500 rounded-xl flex items-center justify-center text-rose-500 font-mono text-3xl font-black">
+                                            / 100
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="text-center text-sm text-slate-400 font-sans mt-8">
+                                    <p className="font-semibold text-slate-500">大家要用功溫習啊！加油！💪</p>
+                                    <p className="mt-4">第 1 頁，共 8 頁</p>
+                                </div>
+                            </div>
+
+                            {}
+                            {/* PAGE 2 */}
+                            <div className="exam-page p-12 md:p-16 border-b border-slate-200 min-h-[29.7cm] page-break">
+                                
+                                {/* 一：標點符號 */}
+                                <section className="mb-10">
+                                    <div className="flex justify-between items-start border-b pb-2 mb-4">
+                                        <h4 className="font-extrabold text-2xl text-slate-800">一．標點符號</h4>
+                                        <span className="text-sm font-semibold text-slate-500">（每個答案1分，共10分）</span>
+                                    </div>
+                                    <p className="text-slate-600 text-sm mb-4 font-sans">請在括號內填上正確的標點符號：</p>
+                                    
+                                    <div className="space-y-6 pl-4 leading-loose tracking-wide">
+                                        {puncEx.sentences.map((node, index) => (
+                                            <span key={index} className="inline-block">
+                                                {node.text.startsWith('\n') && <br />}
+                                                <span>{node.text.replace('\n', '')}</span>
+                                                <span className="mx-1 inline-flex items-center justify-center border-2 border-slate-300 rounded-md w-9 h-9 font-sans text-rose-600 font-bold bg-slate-50">
+                                                    {showAnswers ? node.answer : "　"}
+                                                </span>
+                                            </span>
+                                        ))}
+                                    </div>
+                                </section>
+
+                                {/* 二：供詞填充 */}
+                                <section className="mb-10">
+                                    <div className="flex justify-between items-start border-b pb-2 mb-4">
+                                        <h4 className="font-extrabold text-2xl text-slate-800">二．供詞填充</h4>
+                                        <span className="text-sm font-semibold text-slate-500">（每個答案使用一次，每題2分，共10分）</span>
+                                    </div>
+                                    <p className="text-slate-600 text-sm mb-4 font-sans">試選擇適當的字詞填在橫線上（錯別字扣0.5分，每題最多扣1分；漏字扣1分）：</p>
+                                    
+                                    {/* Words bank box */}
+                                    <div className="border-2 border-emerald-300 bg-emerald-50 rounded-xl p-4 flex flex-wrap gap-4 justify-center mb-6 font-semibold">
+                                        {wordFillBank.map((word, idx) => (
+                                            <span key={idx} className="px-3 py-1 bg-white border border-emerald-200 rounded-lg text-emerald-800 shadow-sm">{word}</span>
+                                        ))}
+                                    </div>
+
+                                    <ol className="space-y-6 pl-6 list-decimal">
+                                        {wordFillEx.map((item, idx) => {
+                                            const parts = item.sentence.split('（' + item.word + '）');
+                                            return (
+                                                <li key={idx} className="leading-relaxed">
+                                                    {parts[0]}
+                                                    <span className="border-b-2 border-slate-400 px-6 font-bold text-rose-600">
+                                                        {showAnswers ? item.word : "　　　"}
+                                                    </span>
+                                                    {parts[1]}
+                                                    <span className="text-xs text-slate-400 font-sans ml-2">({item.lesson})</span>
+                                                </li>
+                                            );
+                                        })}
+                                    </ol>
+                                </section>
+
+                                <div className="text-center text-sm text-slate-400 font-sans mt-12">
+                                    <p>第 2 頁，共 8 頁</p>
+                                </div>
+                            </div>
+
+                            {}
+                            {/* PAGE 3 */}
+                            <div className="exam-page p-12 md:p-16 border-b border-slate-200 min-h-[29.7cm] page-break">
+                                
+                                {/* 三：不供詞填充 */}
+                                <section className="mb-10">
+                                    <div className="flex justify-between items-start border-b pb-2 mb-4">
+                                        <h4 className="font-extrabold text-2xl text-slate-800">三．不供詞填充</h4>
+                                        <span className="text-sm font-semibold text-slate-500">（每空2分，共10分）</span>
+                                    </div>
+                                    <p className="text-slate-600 text-sm mb-4 font-sans">請參考課文內容，在（　）內填上適當的字詞（寫單字/漏字皆不給分）：</p>
+
+                                    <ol className="space-y-6 pl-6 list-decimal">
+                                        {freeFillEx.map((item, idx) => {
+                                            const parts = item.sentence.split('（' + item.word + '）');
+                                            return (
+                                                <li key={idx} className="leading-relaxed">
+                                                    {parts[0]}
+                                                    （<span className="font-bold text-rose-600 px-2">{showAnswers ? item.word : "　　　"}</span>）
+                                                    {parts[1]}
+                                                    <span className="text-xs text-slate-400 font-sans ml-2">({item.lesson})</span>
+                                                </li>
+                                            );
+                                        })}
+                                    </ol>
+                                </section>
+
+                                {/* 四：古詩文問答 */}
+                                <section className="mb-10">
+                                    <div className="flex justify-between items-start border-b pb-2 mb-4">
+                                        <h4 className="font-extrabold text-2xl text-slate-800">四．古詩文問答</h4>
+                                        <span className="text-sm font-semibold text-slate-500">（每空2分，共12分）</span>
+                                    </div>
+                                    <p className="text-slate-600 text-sm mb-4 font-sans">根據《畫雞》及《蜂》的內容，回答下列問題：</p>
+
+                                    <div className="space-y-6 pl-4">
+                                        <div>
+                                            <p className="font-semibold">1. 蜜蜂在花間飛來飛去忙甚麼？</p>
+                                            <div className="grid grid-cols-3 gap-2 mt-2 font-sans text-sm">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="border rounded-full w-5 h-5 flex items-center justify-center border-slate-400">A</span>
+                                                    <span>忙着築巢。</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`border rounded-full w-5 h-5 flex items-center justify-center ${showAnswers ? 'bg-rose-500 text-white border-rose-500' : 'border-slate-400'}`}>B</span>
+                                                    <span className={showAnswers ? "text-rose-600 font-bold" : ""}>忙着採蜜。</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="border rounded-full w-5 h-5 flex items-center justify-center border-slate-400">C</span>
+                                                    <span>忙着繁殖。</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p className="font-semibold">2. 《蜂》這首詩讚揚蜜蜂的甚麼特點？</p>
+                                            <div className="grid grid-cols-3 gap-2 mt-2 font-sans text-sm">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="border rounded-full w-5 h-5 flex items-center justify-center border-slate-400">A</span>
+                                                    <span>誠實。</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="border rounded-full w-5 h-5 flex items-center justify-center border-slate-400">B</span>
+                                                    <span>孝順。</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`border rounded-full w-5 h-5 flex items-center justify-center ${showAnswers ? 'bg-rose-500 text-white border-rose-500' : 'border-slate-400'}`}>C</span>
+                                                    <span className={showAnswers ? "text-rose-600 font-bold" : ""}>勤勞。</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p className="font-semibold">3. 雞在我國傳統文化中還代表甚麼美德？</p>
+                                            <div className="grid grid-cols-3 gap-2 mt-2 font-sans text-sm">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="border rounded-full w-5 h-5 flex items-center justify-center border-slate-400">A</span>
+                                                    <span>大方得體。</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`border rounded-full w-5 h-5 flex items-center justify-center ${showAnswers ? 'bg-rose-500 text-white border-rose-500' : 'border-slate-400'}`}>B</span>
+                                                    <span className={showAnswers ? "text-rose-600 font-bold" : ""}>守時守信。</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="border rounded-full w-5 h-5 flex items-center justify-center border-slate-400">C</span>
+                                                    <span>謙虛有禮。</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="pt-2">
+                                            <p className="font-semibold">4. 請圈出適當的答案：</p>
+                                            <p className="leading-loose pl-4 mt-2">
+                                                在《畫雞》一詩中，公雞有（ 
+                                                <span className={showAnswers ? "bg-rose-100 px-1 border-b-2 border-rose-500 font-bold" : "border-b border-dashed border-slate-400 px-2"}>紅色</span> / 黃色 / 橙色 ）的雞冠，
+                                                （ 
+                                                <span className={showAnswers ? "bg-rose-100 px-1 border-b-2 border-rose-500 font-bold" : "border-b border-dashed border-slate-400 px-2"}>雪白</span> / 棕色 / 灰色 ）的羽毛。
+                                                <br />
+                                                一叫千門（ 十 / 
+                                                <span className={showAnswers ? "bg-rose-100 px-1 border-b-2 border-rose-500 font-bold" : "border-b border-dashed border-slate-400 px-2"}>萬</span> / 百 ）戶開。
+                                            </p>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <div className="text-center text-sm text-slate-400 font-sans mt-12">
+                                    <p>第 3 頁，共 8 頁</p>
+                                </div>
+                            </div>
+
+                            {}
+                            {/* PAGE 4 */}
+                            <div className="exam-page p-12 md:p-16 border-b border-slate-200 min-h-[29.7cm] page-break">
+                                
+                                {/* 五：量詞 */}
+                                <section className="mb-10">
+                                    <div className="flex justify-between items-start border-b pb-2 mb-4">
+                                        <h4 className="font-extrabold text-2xl text-slate-800">五．量詞</h4>
+                                        <span className="text-sm font-semibold text-slate-500">（每題2分，共6分）</span>
+                                    </div>
+                                    <p className="text-slate-600 text-sm mb-4 font-sans">請把適當答案的英文字母填在括號內：</p>
+
+                                    <ol className="space-y-6 pl-6 list-decimal">
+                                        {classifierEx.map((item, idx) => (
+                                            <li key={idx} className="leading-relaxed">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <p>{item.q}</p>
+                                                        <div className="flex gap-6 mt-1 text-sm font-sans text-slate-600">
+                                                            {item.options.map((opt, oIdx) => (
+                                                                <span key={oIdx}>{opt}</span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                    <span className="border-2 border-slate-300 w-10 h-10 flex items-center justify-center font-bold text-rose-600 rounded bg-slate-50 mr-8">
+                                                        {showAnswers ? item.ans : "　"}
+                                                    </span>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ol>
+                                </section>
+
+                                {/* 六：擬人 */}
+                                <section className="mb-10">
+                                    <div className="flex justify-between items-start border-b pb-2 mb-4">
+                                        <h4 className="font-extrabold text-2xl text-slate-800">六．擬人</h4>
+                                        <span className="text-sm font-semibold text-slate-500">（每題2分，共8分）</span>
+                                    </div>
+                                    <p className="text-slate-600 text-sm mb-4 font-sans">在擬人句的括號內加上 ✔ ；不是的加上 ✘：</p>
+
+                                    <ol className="space-y-6 pl-6 list-decimal">
+                                        {personificationEx.map((item, idx) => (
+                                            <li key={idx} className="leading-relaxed">
+                                                <div className="flex justify-between items-center mr-8">
+                                                    <span>{item.s}</span>
+                                                    <span className="border-2 border-slate-300 w-10 h-10 flex items-center justify-center font-bold text-rose-600 rounded bg-slate-50">
+                                                        {showAnswers ? (item.isP ? "✔" : "✘") : "　"}
+                                                    </span>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ol>
+                                </section>
+
+                                {/* 七：擬聲詞 */}
+                                <section className="mb-10">
+                                    <div className="flex justify-between items-start border-b pb-2 mb-4">
+                                        <h4 className="font-extrabold text-2xl text-slate-800">七．擬聲詞</h4>
+                                        <span className="text-sm font-semibold text-slate-500">（每個答案只用一次，每題2分，共10分）</span>
+                                    </div>
+                                    <p className="text-slate-600 text-sm mb-4 font-sans">請在括號內填入最適合的擬聲詞：</p>
+
+                                    <div className="border-2 border-dashed border-slate-300 rounded-xl p-3 flex gap-4 justify-center mb-6 font-semibold text-slate-700 bg-slate-50">
+                                        {onomatopoeiaBank.map((word, idx) => (
+                                            <span key={idx} className="px-2">{word}</span>
+                                        ))}
+                                    </div>
+
+                                    <ol className="space-y-6 pl-6 list-decimal">
+                                        {onomatopoeiaEx.map((item, idx) => {
+                                            const parts = item.sentence.split('（' + item.word + '）');
+                                            return (
+                                                <li key={idx} className="leading-relaxed">
+                                                    {parts[0]}
+                                                    （<span className="font-bold text-rose-600 px-1">{showAnswers ? item.word : "　　"}</span>）
+                                                    {parts[1]}
+                                                </li>
+                                            );
+                                        })}
+                                    </ol>
+                                </section>
+
+                                <div className="text-center text-sm text-slate-400 font-sans mt-12">
+                                    <p>第 4 頁，共 8 頁</p>
+                                </div>
+                            </div>
+
+                            {}
+                            {/* PAGE 5 */}
+                            <div className="exam-page p-12 md:p-16 border-b border-slate-200 min-h-[29.7cm] page-break">
+                                
+                                {/* 八：重組句子 */}
+                                <section className="mb-10">
+                                    <div className="flex justify-between items-start border-b pb-2 mb-4">
+                                        <h4 className="font-extrabold text-2xl text-slate-800">八．重組句子</h4>
+                                        <span className="text-sm font-semibold text-slate-500">（每題3分，共6分）</span>
+                                    </div>
+                                    <p className="text-slate-600 text-sm mb-4 font-sans">把下列詞語重新排列成通順的句子，以文字寫出來（缺標點或錯標點每個扣0.5分）：</p>
+
+                                    <ol className="space-y-8 pl-6 list-decimal">
+                                        {reorderEx.map((item, idx) => (
+                                            <li key={idx} className="leading-relaxed">
+                                                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-base font-sans inline-block mb-2">
+                                                    {item.parts.map((part, pIdx) => (
+                                                        <span key={pIdx}>
+                                                            {part} {pIdx < item.parts.length - 1 && " / "}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                                <div className="mt-4 border-b border-dashed border-slate-400 pb-2 text-rose-600 font-bold min-h-[3rem]">
+                                                    {showAnswers ? item.ans : ""}
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ol>
+                                </section>
+
+                                {/* 九：改寫句子 */}
+                                <section className="mb-10">
+                                    <div className="flex justify-between items-start border-b pb-2 mb-4">
+                                        <h4 className="font-extrabold text-2xl text-slate-800">九．改寫句子</h4>
+                                        <span className="text-sm font-semibold text-slate-500">（每題2分，共4分）</span>
+                                    </div>
+                                    <p className="text-slate-600 text-sm mb-4 font-sans">依照例句，把下列句子改寫成疑問句：</p>
+                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm font-sans mb-4 leading-relaxed">
+                                        <span className="font-bold text-amber-800">例：</span>媽媽會帶我到動物園遊玩。（哪裏）<br />
+                                        👉 媽媽會帶我到<span className="font-bold underline">哪裏</span>遊玩？
+                                    </div>
+
+                                    <ol className="space-y-6 pl-6 list-decimal">
+                                        {rewriteEx.map((item, idx) => (
+                                            <li key={idx} className="leading-relaxed">
+                                                <p>{item.orig} <span className="text-slate-500 font-sans text-sm">（使用：{item.key}）</span></p>
+                                                <div className="mt-2 border-b border-dashed border-slate-400 pb-2 text-rose-600 font-bold min-h-[2.5rem]">
+                                                    {showAnswers ? item.ans : ""}
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ol>
+                                </section>
+
+                                {/* 十：四素句仿作句子 */}
+                                <section className="mb-10">
+                                    <div className="flex justify-between items-start border-b pb-2 mb-4">
+                                        <h4 className="font-extrabold text-2xl text-slate-800">十．四素句仿作句子</h4>
+                                        <span className="text-sm font-semibold text-slate-500">（每題4分，共4分）</span>
+                                    </div>
+                                    <p className="text-slate-600 text-sm mb-4 font-sans">請依「四素句」（時間、人物、地點、事情），仿作句子（不可與例句重複）：</p>
+                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm font-sans mb-4 leading-relaxed">
+                                        <span className="font-bold text-amber-800">例：</span><span className="underline">昨天中午</span>（時間），<span className="underline">同學</span>（人物）在<span className="underline">操場上</span>（地點）<span className="underline">開心地打籃球</span>（事情）。
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div className="border-b border-dashed border-slate-400 pb-8 text-rose-600 font-bold min-h-[4rem]">
+                                            {showAnswers ? "（例：）今天清早，小老虎在森林裏迷路了。" : "時間：__________，人物：________在__________（地點）_____________________（事情）。"}
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <div className="text-center text-sm text-slate-400 font-sans mt-12">
+                                    <p>第 5 頁，共 8 頁</p>
+                                </div>
+                            </div>
+
+                            {}
+                            {/* PAGE 6 (Reading Comprehension) */}
+                            <div className="exam-page p-12 md:p-16 border-b border-slate-200 min-h-[29.7cm] page-break">
+                                
+                                {/* 十一：閱讀理解（書信） */}
+                                <section className="mb-10">
+                                    <div className="flex justify-between items-start border-b pb-2 mb-4">
+                                        <h4 className="font-extrabold text-2xl text-slate-800">十一．閱讀理解（書信）</h4>
+                                        <span className="text-sm font-semibold text-slate-500">（共5分）</span>
+                                    </div>
+                                    <p className="text-slate-600 text-sm mb-4 font-sans">閱讀下面的文字，然後回答問題：</p>
+
+                                    <div className="border-2 border-slate-200 rounded-2xl p-6 bg-amber-50/30 mb-6 tracking-wide leading-relaxed font-sans text-base">
+                                        <p className="font-bold">親愛的子文：</p>
+                                        <p className="indent-8 my-2">社區中心將會在這個月底舉辦「趣味摺紙班」，我想邀請你一起參加這個活動。以下是摺紙班的詳情：</p>
+                                        <p className="pl-8 text-slate-700">
+                                            <strong>日期：</strong>一月二十日（星期日）<br />
+                                            <strong>時間：</strong>下午三時至五時<br />
+                                            <strong>地點：</strong>樂心社區中心三樓活動室
+                                        </p>
+                                        <p className="text-right mt-4">朋友 <strong className="underline">加明</strong> 上</p>
+                                        <p className="text-right">一月四日</p>
+                                    </div>
+
+                                    <div className="space-y-6">
+                                        <div>
+                                            <p>1. 這張邀請卡是寫給誰的？（2分）</p>
+                                            <p className="pl-4 mt-2">
+                                                這張邀請卡是加明寫給
+                                                <span className="border-b border-slate-400 px-6 font-bold text-rose-600">
+                                                    {showAnswers ? "子文" : "　　　"}
+                                                </span> 的。
+                                            </p>
+                                        </div>
+
+                                        <div>
+                                            <p>2. 發卡人和收卡人是甚麼關係？（1分）</p>
+                                            <div className="grid grid-cols-4 gap-2 mt-2 font-sans text-sm">
+                                                <div className="flex items-center gap-1">
+                                                    <span className="border rounded-full w-4 h-4 flex items-center justify-center text-xs border-slate-400">A</span>
+                                                    <span>同學</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <span className={`border rounded-full w-4 h-4 flex items-center justify-center text-xs ${showAnswers ? 'bg-rose-500 text-white border-rose-500' : 'border-slate-400'}`}>B</span>
+                                                    <span className={showAnswers ? "text-rose-600 font-bold" : ""}>朋友</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <span className="border rounded-full w-4 h-4 flex items-center justify-center text-xs border-slate-400">C</span>
+                                                    <span>表兄弟</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <span className="border rounded-full w-4 h-4 flex items-center justify-center text-xs border-slate-400">D</span>
+                                                    <span>兄弟</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p>3. 發卡人寫這張卡的主要目的是甚麼？（2分）</p>
+                                            <div className="space-y-1.5 mt-2 font-sans text-sm">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="border rounded-full w-5 h-5 flex items-center justify-center border-slate-400">A</span>
+                                                    <span>說出自己的興趣。</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="border rounded-full w-5 h-5 flex items-center justify-center border-slate-400">B</span>
+                                                    <span>說明活動的過程。</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`border rounded-full w-5 h-5 flex items-center justify-center ${showAnswers ? 'bg-rose-500 text-white border-rose-500' : 'border-slate-400'}`}>C</span>
+                                                    <span className={showAnswers ? "text-rose-600 font-bold" : ""}>邀請朋友參加活動。</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="border rounded-full w-5 h-5 flex items-center justify-center border-slate-400">D</span>
+                                                    <span>介紹中國傳統手工藝。</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <div className="text-center text-sm text-slate-400 font-sans mt-12">
+                                    <p>第 6 頁，共 8 頁</p>
+                                </div>
+                            </div>
+
+                            {}
+                            {/* PAGE 7 (Reading Comprehension 2) */}
+                            <div className="exam-page p-12 md:p-16 border-b border-slate-200 min-h-[29.7cm] page-break">
+                                
+                                {/* 十二：閱讀理解（故事） */}
+                                <section className="mb-10">
+                                    <div className="flex justify-between items-start border-b pb-2 mb-4">
+                                        <h4 className="font-extrabold text-2xl text-slate-800">十二．閱讀理解</h4>
+                                        <span className="text-sm font-semibold text-slate-500">（共15分）</span>
+                                    </div>
+                                    <p className="text-slate-600 text-sm mb-4 font-sans">細心閱讀下面的文章，然後回答問題：</p>
+
+                                    <div className="border-2 border-slate-200 rounded-2xl p-6 bg-slate-50/50 mb-6 tracking-widest leading-loose text-lg">
+                                        <p className="indent-8 mb-2">一天傍晚，小老虎在森林裏迷路了。</p>
+                                        <p className="indent-8 mb-2">小老虎在森林裏走了很久，覺得很累，肚子餓得咕咕地叫。小老虎想快點回家，但是眼看天快要黑了，他卻認不清回家的方向，感到很着急。一陣風吹來，森林到處發出<span className="underline">沙沙</span>的聲音，小老虎嚇壞了，不由得坐在地上嗚嗚地哭起來。</p>
+                                        <p className="indent-8 mb-2">這時，正在森林裏採蘑菇的黑熊媽媽聽到哭聲，感到很奇怪，便沿着聲音走過去。黑熊媽媽看到小老虎，便問他為甚麼哭。小老虎把事情告訴了黑熊媽媽。於是，黑熊媽媽把小老虎帶回自己家裏，還為他做了一頓美味的晚餐。小老虎吃得飽飽的，然後和小黑熊一起玩遊戲，度過了一個愉快的晚上。</p>
+                                        <p className="indent-8">第二天清早，黑熊媽媽送小老虎回家。臨走前，小老虎向黑熊媽媽道謝，還和小黑熊約好了下次再一起玩遊戲呢！</p>
+                                    </div>
+
+                                    <div className="space-y-6">
+                                        <p className="text-slate-600 text-sm font-sans">從文中第三段找出適當的詞語，填在第1-2題的橫線上，使句子的意思完整（不可填寫單字）：</p>
+                                        
+                                        <div>
+                                            <p>1. 哥哥穿了一雙顏色不一樣的鞋子，非常（<span className="font-bold text-rose-600 px-3">{showAnswers ? "奇怪" : "　　　"}</span>）。（2分）</p>
+                                        </div>
+
+                                        <div>
+                                            <p>2. 陳老師說了一個有趣的故事，教室裏充滿了（<span className="font-bold text-rose-600 px-3">{showAnswers ? "愉快" : "　　　"}</span>）的笑聲。（2分）</p>
+                                        </div>
+
+                                        <div>
+                                            <p>3. 找出文中第一段的時間、人物、地點和事情，填在橫線上（4分）：</p>
+                                            <div className="grid grid-cols-2 gap-4 mt-2 text-base">
+                                                <div className="border p-2 rounded">時間：<span className="font-bold text-rose-600">{showAnswers ? "一天傍晚" : "_____________"}</span></div>
+                                                <div className="border p-2 rounded">人物：<span className="font-bold text-rose-600">{showAnswers ? "小老虎" : "_____________"}</span></div>
+                                                <div className="border p-2 rounded">地點：<span className="font-bold text-rose-600">{showAnswers ? "森林裏" : "_____________"}</span></div>
+                                                <div className="border p-2 rounded">事情：<span className="font-bold text-rose-600">{showAnswers ? "迷路了" : "_____________"}</span></div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p>4. 為甚麼小老虎嚇壞了？（2分）</p>
+                                            <div className="grid grid-cols-2 gap-2 mt-2 font-sans text-xs">
+                                                <div className="flex items-center gap-1">
+                                                    <span className="border rounded-full w-4 h-4 flex items-center justify-center text-xs border-slate-400">A</span>
+                                                    <span>因為小老虎肚子很餓。</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <span className={`border rounded-full w-4 h-4 flex items-center justify-center text-xs ${showAnswers ? 'bg-rose-500 text-white border-rose-500' : 'border-slate-400'}`}>B</span>
+                                                    <span className={showAnswers ? "text-rose-600 font-bold" : ""}>因為小老虎害怕沙沙的風聲。</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <span className="border rounded-full w-4 h-4 flex items-center justify-center text-xs border-slate-400">C</span>
+                                                    <span>因為小老虎害怕黑熊。</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <span className="border rounded-full w-4 h-4 flex items-center justify-center text-xs border-slate-400">D</span>
+                                                    <span>因為小老虎擔心被媽媽責備。</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p>5. 黑熊媽媽原本在森林裏做甚麼？（2分）</p>
+                                            <div className="grid grid-cols-4 gap-2 mt-2 font-sans text-xs">
+                                                <div className="flex items-center gap-1">
+                                                    <span className="border rounded-full w-4 h-4 flex items-center justify-center text-xs border-slate-400">A</span>
+                                                    <span>散步</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <span className="border rounded-full w-4 h-4 flex items-center justify-center text-xs border-slate-400">B</span>
+                                                    <span>採花朵</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <span className={`border rounded-full w-4 h-4 flex items-center justify-center text-xs ${showAnswers ? 'bg-rose-500 text-white border-rose-500' : 'border-slate-400'}`}>C</span>
+                                                    <span className={showAnswers ? "text-rose-600 font-bold" : ""}>採蘑菇</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <span className="border rounded-full w-4 h-4 flex items-center justify-center text-xs border-slate-400">D</span>
+                                                    <span>找蜜糖</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p>6. 按事情發展的先後次序排列下面各項（請把英文字母填在方格內）（3分）：</p>
+                                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-sm font-sans leading-relaxed mb-3">
+                                                A. 黑熊媽媽帶小老虎回家<br />
+                                                B. 小老虎坐在地上哭<br />
+                                                C. 小老虎和小黑熊一起玩遊戲<br />
+                                                D. 小老虎肚子餓得咕咕叫
+                                            </div>
+                                            <div className="flex items-center gap-2 font-sans text-sm">
+                                                <span className="border border-slate-400 w-8 h-8 flex items-center justify-center rounded">D</span>
+                                                <span>➡️</span>
+                                                <span className="border border-slate-400 w-8 h-8 flex items-center justify-center rounded">B</span>
+                                                <span>➡️</span>
+                                                <span className="border border-slate-400 w-8 h-8 flex items-center justify-center rounded">A</span>
+                                                <span>➡️</span>
+                                                <span className="border border-slate-400 w-8 h-8 flex items-center justify-center rounded">C</span>
+                                                <span className="ml-4 text-xs text-slate-400 font-semibold">（全部正確才給分）</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-center font-bold text-xl tracking-widest text-slate-600 mt-12">*** 全卷完 ***</p>
+                                </section>
+
+                                <div className="text-center text-sm text-slate-400 font-sans mt-8">
+                                    <p>第 7 頁，共 8 頁</p>
+                                </div>
+                            </div>
+
+                            {}
+                            {/* REFERENCE ANSWER PAGE (Page 8) */}
+                            <div className="exam-page p-12 md:p-16 min-h-[29.7cm] page-break bg-rose-50/10 border-t-4 border-rose-500">
+                                <div className="text-center mb-8">
+                                    <h2 className="text-3xl font-black text-rose-600">中 文 科 參 考 答 案</h2>
+                                    <p className="text-slate-500 text-sm font-sans mt-2">（此頁專為老師批改、評分時提供參考，內容參照 2526_FS1_第二次總結性評估前練習_答案版.pdf）</p>
+                                </div>
+
+                                <div className="space-y-6 text-base leading-relaxed">
+                                    <div>
+                                        <h5 className="font-extrabold text-slate-800 border-b border-rose-200 pb-1">一．標點符號 （每題1分，共10分）</h5>
+                                        <p className="pl-4 font-sans text-rose-600 font-bold">
+                                            {puncEx.sentences.map((node, i) => (
+                                                <span key={i} className="mr-4">({i+1}) {node.answer}</span>
+                                            ))}
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <h5 className="font-extrabold text-slate-800 border-b border-rose-200 pb-1">二．供詞填充 （每題2分，共10分）</h5>
+                                        <ol className="pl-6 list-decimal font-sans text-rose-600 font-bold">
+                                            {wordFillEx.map((item, i) => (
+                                                <li key={i}>{item.word}</li>
+                                            ))}
+                                        </ol>
+                                        <p className="text-xs text-slate-400 mt-1 pl-4 font-sans">★ 評分指引：錯別字扣 0.5 分，每題最多扣 1 分。漏字扣 1 分。</p>
+                                    </div>
+
+                                    <div>
+                                        <h5 className="font-extrabold text-slate-800 border-b border-rose-200 pb-1">三．不供詞填充 （每題2分，共10分）</h5>
+                                        <ol className="pl-6 list-decimal font-sans text-rose-600 font-bold">
+                                            {freeFillEx.map((item, i) => (
+                                                <li key={i}>{item.word}</li>
+                                            ))}
+                                        </ol>
+                                        <p className="text-xs text-slate-400 mt-1 pl-4 font-sans">★ 評分指引：不供詞寫單字或漏字皆全扣。</p>
+                                    </div>
+
+                                    <div>
+                                        <h5 className="font-extrabold text-slate-800 border-b border-rose-200 pb-1">四．古詩文問答 （每個答案2分，共12分）</h5>
+                                        <ul className="pl-6 list-disc font-sans text-rose-600 font-bold space-y-1">
+                                            <li>1. B (忙着採蜜)</li>
+                                            <li>2. C (勤勞)</li>
+                                            <li>3. B (守時守信)</li>
+                                            <li>4. 圈選答案：紅色 、 雪白 、 萬</li>
+                                        </ul>
+                                    </div>
+
+                                    <div>
+                                        <h5 className="font-extrabold text-slate-800 border-b border-rose-200 pb-1">五．量詞 （每題2分，共6分）</h5>
+                                        <ol className="pl-6 list-decimal font-sans text-rose-600 font-bold">
+                                            {classifierEx.map((item, i) => (
+                                                <li key={i}>{item.ans}</li>
+                                            ))}
+                                        </ol>
+                                    </div>
+
+                                    <div>
+                                        <h5 className="font-extrabold text-slate-800 border-b border-rose-200 pb-1">六．擬人 （每題2分，共8分）</h5>
+                                        <ol className="pl-6 list-decimal font-sans text-rose-600 font-bold">
+                                            {personificationEx.map((item, i) => (
+                                                <li key={i}>{item.isP ? "✔" : "✘"}</li>
+                                            ))}
+                                        </ol>
+                                    </div>
+
+                                    <div>
+                                        <h5 className="font-extrabold text-slate-800 border-b border-rose-200 pb-1">七．擬聲詞 （每題2分，共10分）</h5>
+                                        <ol className="pl-6 list-decimal font-sans text-rose-600 font-bold">
+                                            {onomatopoeiaEx.map((item, i) => (
+                                                <li key={i}>{item.word}</li>
+                                            ))}
+                                        </ol>
+                                    </div>
+
+                                    <div>
+                                        <h5 className="font-extrabold text-slate-800 border-b border-rose-200 pb-1">八．重組句子 （每題3分，共6分）</h5>
+                                        <ol className="pl-6 list-decimal font-sans text-rose-600 font-bold space-y-1">
+                                            {reorderEx.map((item, i) => (
+                                                <li key={i} className="font-serif">{item.ans}</li>
+                                            ))}
+                                        </ol>
+                                        <p className="text-xs text-slate-400 mt-1 pl-4 font-sans">★ 評分指引：缺失整句 0 分；漏/錯字每個扣 0.5分；缺標點或位置錯扣 0.5分。</p>
+                                    </div>
+
+                                    <div>
+                                        <h5 className="font-extrabold text-slate-800 border-b border-rose-200 pb-1">九．改寫句子 （每題2分，共4分）</h5>
+                                        <ol className="pl-6 list-decimal font-sans text-rose-600 font-bold space-y-1">
+                                            {rewriteEx.map((item, i) => (
+                                                <li key={i} className="font-serif">{item.ans}</li>
+                                            ))}
+                                        </ol>
+                                    </div>
+
+                                    <div>
+                                        <h5 className="font-extrabold text-slate-800 border-b border-rose-200 pb-1">十．四素句仿作句子 （每題4分，共4分）</h5>
+                                        <p className="pl-4 font-sans text-slate-600">示例：<span className="text-rose-600 font-bold">今天清早，小老虎在森林裏迷路了。</span></p>
+                                        <p className="text-xs text-slate-400 mt-1 pl-4 font-sans">★ 評分指引：須包含「時間、人物、地點、事情」四大元素。錯字扣0.5分，文理不通處酌量扣分。</p>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <h5 className="font-extrabold text-slate-800 border-b border-rose-200 pb-1">十一．閱讀理解（書信）</h5>
+                                            <ul className="pl-6 list-disc font-sans text-rose-600 font-bold text-sm">
+                                                <li>1. 子文 (2分)</li>
+                                                <li>2. B (1分)</li>
+                                                <li>3. C (2分)</li>
+                                            </ul>
+                                        </div>
+                                        <div>
+                                            <h5 className="font-extrabold text-slate-800 border-b border-rose-200 pb-1">十二．閱讀理解</h5>
+                                            <ul className="pl-6 list-disc font-sans text-rose-600 font-bold text-sm">
+                                                <li>1. 奇怪 (2分)</li>
+                                                <li>2. 愉快 (2分)</li>
+                                                <li>3. 時間：一天傍晚，人物：小老虎，地點：森林裏，事情：迷路了 (4分)</li>
+                                                <li>4. B (2分)</li>
+                                                <li>5. C (2分)</li>
+                                                <li>6. 排列順序： D ➡️ B ➡️ A ➡️ C (3分，全對才給分)</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="text-center text-sm text-slate-400 font-sans mt-12">
+                                    <p>第 8 頁，共 8 頁（僅供老師閱卷之用）</p>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
